@@ -131,7 +131,7 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 
 		var validateSlot = itemStorage.GetIndexedItemSlot(0);
 		if (validateSlot.RootPlayer() != playerScript.registerTile) return;
-		
+
 		foreach (var item in slots)
 		{
 			Inventory.ServerDrop(item);
@@ -188,17 +188,6 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 			equipSlot == NamedSlot.leftHand ? SpinMode.Clockwise : SpinMode.CounterClockwise, (BodyPartType) aim);
 	}
 
-	[Command] //Remember with the parent you can only send networked objects:
-	public void CmdPlaceItem(NamedSlot equipSlot, Vector3 worldPos, GameObject newParent, bool isTileMap)
-	{
-		var targetVector = worldPos - gameObject.TileWorldPosition().To3Int();
-		if (!Validations.CanApply(playerScript, newParent, NetworkSide.Server, targetVector: targetVector)) return;
-		if (!Cooldowns.TryStartServer(playerScript, CommonCooldowns.Instance.Interaction)) return;
-
-		var slot = itemStorage.GetNamedItemSlot(equipSlot);
-		Inventory.ServerDrop(slot, worldPos);
-	}
-
 	[Command]
 	public void CmdToggleLightSwitch(GameObject switchObj)
 	{
@@ -247,10 +236,12 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 	}
 
 	[Command]
-	public void CmdRegisterVote(string userId, bool isFor)
+	public void CmdRegisterVote(bool isFor)
 	{
 		if (VotingManager.Instance == null) return;
-		VotingManager.Instance.RegisterVote(userId, isFor);
+		var connectedPlayer = PlayerList.Instance.Get(gameObject);
+		if (connectedPlayer == ConnectedPlayer.Invalid) return;
+		VotingManager.Instance.RegisterVote(connectedPlayer.UserId, isFor);
 	}
 
 	/// <summary>
@@ -354,10 +345,10 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 				break;
 		}
 
-		playerScript.pushPull.CmdStopPulling();
+		playerScript.pushPull.ServerStopPulling();
 	}
 
-	[Command]
+	[Server]
 	public void CmdToggleChatIcon(bool turnOn, string message, ChatChannel chatChannel, ChatModifier chatModifier)
 	{
 		if (!playerScript.pushPull.VisibleState || (playerScript.mind.occupation.JobType == JobType.NULL)
@@ -417,6 +408,12 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 	/// </summary>
 	[Command]
 	public void CmdSpawnPlayerGhost()
+	{
+		ServerSpawnPlayerGhost();
+	}
+
+	[Server]
+	public void ServerSpawnPlayerGhost()
 	{
 		if (GetComponent<LivingHealthBehaviour>().IsDead && !playerScript.IsGhost)
 		{
@@ -483,13 +480,12 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 			SoundManager.PlayNetworkedAtPos("EatFood", transform.position);
 		}
 
-		PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+		Chat.AddActionMsgToChat(gameObject, $"You eat the {food.Item().ArticleName}.", $"{gameObject.Player().Name} eats the {food.Item().ArticleName}.");
 
-		//FIXME: remove blood changes after TDM
-		//and use this Cmd for healing hunger and applying
-		//food related attributes instead:
-		playerHealth.bloodSystem.BloodLevel += baseFood.healAmount;
-		playerHealth.bloodSystem.StopBleedingAll();
+		PlayerHealth playerHealth = GetComponent<PlayerHealth>();
+		Edible edible = food.GetComponent<Edible>();
+
+		playerHealth.Metabolism.AddEffect(new MetabolismEffect(edible.NutrientsHealAmount, 0, MetabolismDuration.Food));
 
 		Inventory.ServerDespawn(slot);
 
