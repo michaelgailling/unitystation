@@ -415,7 +415,9 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 	[Server]
 	public void ServerSpawnPlayerGhost()
 	{
-		if (GetComponent<LivingHealthBehaviour>().IsDead && !playerScript.IsGhost)
+		//Only force to ghost if the mind belongs in to that body
+		var currentMobID = GetComponent<LivingHealthBehaviour>().mobID;
+		if (GetComponent<LivingHealthBehaviour>().IsDead && !playerScript.IsGhost && playerScript.mind.bodyMobID == currentMobID)
 		{
 			PlayerSpawn.ServerSpawnGhost(playerScript.mind);
 		}
@@ -485,7 +487,7 @@ public partial class PlayerNetworkActions : NetworkBehaviour
 		PlayerHealth playerHealth = GetComponent<PlayerHealth>();
 		Edible edible = food.GetComponent<Edible>();
 
-		playerHealth.Metabolism.AddEffect(new MetabolismEffect(edible.NutrientsHealAmount, 0, MetabolismDuration.Food));
+		playerHealth.Metabolism.AddEffect(new MetabolismEffect(edible.nutritionLevel, 0, MetabolismDuration.Food));
 
 		Inventory.ServerDespawn(slot);
 
